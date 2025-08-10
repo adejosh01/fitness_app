@@ -1,10 +1,59 @@
-import { View, Text, TextInput, TouchableOpacity } from 'react-native'
-import React, { useState } from 'react'
+import { View, Text, TextInput, TouchableOpacity, FlatList, RefreshControl } from 'react-native'
+import React, { useEffect, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import {defineQuery} from "groq"
+import { client } from '@/lib/sanity/client';
+import { Exercise } from '@/lib/sanity/types';
+import { ExerciseCard } from '@/app/components/ExerciseCard';
 
-const Exercises = () => {
+
+
+export const exercisesQuery = defineQuery(`*[_type == "exercise"] {
+     ...
+  }`)
+
+
+
+export default function Exercises() {
   const [seachQuery, setSearchQuery] = useState("");
+  const router = useRouter()
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [exercises, setExercises] = useState<Exercise[]>([])
+  const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([])
+
+  const fetchExercises = async () => {
+    try {
+      const exercises = await client.fetch(exercisesQuery);
+      setExercises(exercises)
+      setFilteredExercises(exercises)
+    } catch (error) {
+      console.error("Error fetching exercises", error)
+    }
+  }
+
+  useEffect(() => {
+    fetchExercises()
+  }, [])
+
+  useEffect(() => {
+    const filtered = exercises.filter((exercise: Exercise) => {
+      const name = exercise?.name || ""; // fallback to empty string
+      return name.toLowerCase().includes(seachQuery.toLowerCase());
+    });
+    setFilteredExercises(filtered);
+  }, [seachQuery, exercises]);
+  
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await fetchExercises();
+    setRefreshing(false);
+  }
+
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="px-6 py-4 bg-white border-b border-gray-300">
@@ -30,8 +79,30 @@ const Exercises = () => {
           )}
         </View>
       </View>
+
+      <FlatList
+        data={filteredExercises}
+        keyExtractor={(item) => item._id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 24 }}
+        renderItem={({ item }) => (
+          <ExerciseCard
+            item={item}
+            onPress={() => router.push(`/exercise-detail?id=${item._id}`)}
+          />
+        )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#3BB2F6"]} //Andriod
+            tintColor="#3BB2F6" //IOS
+            title="Pull to refresh exercises"
+            titleColor="#6B7280"
+          />
+        }
+      />
     </SafeAreaView>
   );
 }
 
-export default Exercises
